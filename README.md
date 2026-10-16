@@ -7,9 +7,9 @@ This is not personal financial advice and it does not place trades. A `research_
 ## How a run works
 
 1. `next_investigation` loads the FTSE 350 extract (operating companies plus investment vehicles) and returns one name.
-2. The agent judges growth potential from that card and from lessons already on the ledger.
-3. `record_learning` stores a structured assessment. Free-form notes are kept on the assessment. Any claim that should change another investigation is stored as a lesson with a scope.
-4. A lesson scoped to `matching` or `all_names` is queued against constituents that were already assessed, and it is attached to later names that fit. Revisits jump ahead of unseen tickers.
+2. The agent judges growth potential from that card, from lessons already on the ledger, and from any supply network already mapped.
+3. `record_learning` stores a structured assessment, the operating ecosystem, and supply relationships. A `supplies_to` link means the company holds contracts for that customer or prime. The prime's trajectory is kept as the proxy for how those contracts may grow.
+4. A lesson, or a change in a prime's trajectory, is queued against constituents already assessed. A later name that sits in the same ecosystem arrives with those links and trajectories already filled in, so the overlapping part of the work is not repeated.
 
 Progress is alphabetical by ticker. The weekday schedule (`bot/schedules/weekday-investigation.ts`, 08:17 UTC, Monday to Friday) investigates one name. Schedules do not fire under local `--dev`.
 
@@ -21,7 +21,8 @@ Shared across sessions, in the host key-value store:
 | --- | --- |
 | Assessment | Stance, conviction, growth thesis, drivers, risks, what would change the view, and free notes |
 | Lesson | Statement, effect, confidence (`tentative` → `supported` → `repeated`), and where it applies |
-| Revisit | An already-assessed name that a newer lesson now matches |
+| Revisit | An already-assessed name that a newer lesson or a changed prime-contractor trajectory now affects |
+| Relationship | Who supplies whom, in which ecosystem, and the prime's trajectory when the prime is outside the extract |
 
 Matching lessons combine sectors, vehicles, and value-screen signals (any value inside a field, all fields must hit). Traits match if any listed trait is present, or every trait when `traitMatch` is `all`.
 

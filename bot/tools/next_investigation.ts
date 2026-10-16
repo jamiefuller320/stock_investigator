@@ -4,7 +4,7 @@ import { buildWorkItem } from "../lib/framework.js";
 
 export default defineTool({
   description:
-    "Pick the next FTSE 350 growth investigation. Revisits triggered by a new lesson come before unseen names. Pass a ticker only when the user asked for that constituent. Returns the company card from the value_investor screen, any prior assessment, and the lessons that must be accounted for.",
+    "Pick the next FTSE 350 growth investigation. Revisits triggered by a lesson or by a prime-contractor trajectory come before unseen names. Pass a ticker only when the user asked for that constituent. Returns the company card, prior assessment, lessons, and any ecosystem or supply relationships already on the ledger.",
   effect: "read",
   inputSchema: z.object({
     ticker: z

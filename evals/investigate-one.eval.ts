@@ -11,7 +11,11 @@ export default defineEval({
     t.calledTool("next_investigation", {
       output: (value) => {
         const text = typeof value === "string" ? value : JSON.stringify(value);
-        return text.includes("debtToEquityPercent") && !text.includes('"debtToEquity":');
+        return (
+          text.includes("debtToEquityPercent") &&
+          !text.includes('"debtToEquity":') &&
+          text.includes('"network"')
+        );
       },
     });
     t.calledTool("record_learning");

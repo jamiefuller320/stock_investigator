@@ -1,5 +1,5 @@
 ---
-description: Assess one FTSE 350 name for growth potential and record lessons that apply to future names and names already assessed.
+description: Assess one FTSE 350 name for growth potential, record the ecosystem and supply contracts, and reuse lessons and prime-contractor trajectories on later names.
 ---
 
 # Growth investigation
@@ -27,9 +27,24 @@ For `vehicle: investment_vehicle`, growth means NAV compounding, costs, and disc
 
 On a revisit, compare with `priorAssessment`. Say whether stance or conviction moved, and why.
 
+## Ecosystem and supply contracts
+
+For an operating company, name the ecosystem it sells into. If `network.knownEcosystems` already has that ecosystem, use the same label.
+
+Record `supplies_to` when the company holds supply contracts for a customer or prime contractor. The prime's trajectory is the demand proxy for how those contracts may grow. Prefer a counterparty that is already on the ledger.
+
+- If `network.direct` names a prime and `trajectory.source` is `ledger_assessment`, use that stance and revenue view. Do not rebuild the prime's growth story or invent figures for it.
+- If the prime is outside the FTSE 350 extract, omit `counterpartyTicker` and, when you can, store a qualitative `counterpartyTrajectory` and `trajectoryNote`. Do not invent contract values, durations, or financials.
+- If this investigation is of the prime, record suppliers with `subjectTicker` set to the supplier and the prime as the counterparty. Those suppliers inherit the prime's trajectory when their turn comes.
+- `relationshipsAcknowledged` must include every id in `network.requiredRelationshipIds`.
+- `provenance` is `prior_investigation` when the link was already in the packet, `company_card` only when the card text names it, otherwise `general_knowledge`.
+- A name with no material supply relationship still gets an `ecosystem` when you know one. Investment vehicles usually have neither.
+
+Peers in `network.peers` are names already filed in the same ecosystem. Extend that map. Do not redraw it.
+
 ## Free thinking
 
-Reason freely in `freeNotes`. A claim that should change how another name is judged must also be a lesson. Notes alone are not reused.
+Reason freely in `freeNotes`. A claim that should change how another name is judged must also be a lesson or a relationship. Notes alone are not reused.
 
 ## Lessons
 

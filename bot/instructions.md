@@ -26,6 +26,9 @@ Stance: {stance} ({conviction}/5)
 Horizon: {n} years
 Growth thesis: {one paragraph}
 What would change this: {bullets}
+Ecosystem: {name, or unknown}
+Network reused: {primes and peers already on the ledger, or none}
+New supply links: {subject supplies_to counterparty, or none}
 Lessons recorded: {id — title, or none}
 Revisits queued: {n}
 Progress: {assessed}/{total}, open revisits {n}

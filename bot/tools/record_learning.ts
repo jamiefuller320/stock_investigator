@@ -15,7 +15,7 @@ const confidence = z.enum(CONFIDENCE);
 
 export default defineTool({
   description:
-    "Save one structured growth assessment and any reusable lessons. Lessons with scope matching or all_names are queued against constituents already assessed. lessonsApplied must include every id from the work packet, even when a lesson did not change the stance. Call once per name.",
+    "Save one structured growth assessment, reusable lessons, and ecosystem relationships. Lessons and newly mapped primes are queued against constituents already assessed. lessonsApplied and relationshipsAcknowledged must cite every id in the work packet. Call once per name.",
   effect: "write",
   inputSchema: z.object({
     ticker: z.string(),
@@ -45,11 +45,54 @@ export default defineTool({
       .max(12)
       .optional()
       .describe("Ids from lessonsToApply. Required when that list is non-empty."),
+    ecosystem: z
+      .string()
+      .min(3)
+      .max(80)
+      .optional()
+      .describe("Operating ecosystem, such as UK defence aerospace or seaborne iron ore. Reuse a name already listed in network.knownEcosystems when it fits."),
+    relationshipsAcknowledged: z
+      .array(z.string())
+      .max(12)
+      .optional()
+      .describe("Ids from network.direct. Required when that list is non-empty."),
+    relationships: z
+      .array(
+        z.object({
+          subjectTicker: z
+            .string()
+            .optional()
+            .describe("FTSE ticker on the supplier side. Defaults to the company being assessed. Use another ticker when mapping that supplier from the prime's investigation."),
+          role: z.enum(["supplies_to", "buys_from", "competes_with", "same_programme"]),
+          counterpartyTicker: z
+            .string()
+            .optional()
+            .describe("FTSE ticker when the counterparty is in the extract. Omit for a government, foreign, or private prime."),
+          counterpartyName: z.string().min(2).max(120),
+          ecosystem: z.string().min(3).max(80),
+          programme: z.string().min(2).max(120).optional(),
+          rationale: z.string().min(10).max(400),
+          provenance: z.enum(["general_knowledge", "company_card", "prior_investigation"]),
+          confidence: confidence.optional(),
+          counterpartyTrajectory: z.enum(["expanding", "steady", "contracting", "unclear"]).optional(),
+          trajectoryNote: z
+            .string()
+            .min(10)
+            .max(400)
+            .optional()
+            .describe("Qualitative demand proxy for a prime that is not on this ledger. No contract values or financial figures."),
+        }),
+      )
+      .max(6)
+      .optional()
+      .describe(
+        "supplies_to means this subject holds supply contracts for the counterparty. The counterparty trajectory is the proxy for how those contracts may grow.",
+      ),
     freeNotes: z
       .string()
       .max(4000)
       .optional()
-      .describe("Free reasoning. Anything reusable must also be a lesson, not only prose here."),
+      .describe("Free reasoning. Anything reusable must also be a lesson or a relationship, not only prose here."),
     lessons: z
       .array(
         z.object({
@@ -87,6 +130,12 @@ export default defineTool({
       .describe("Raise an existing lesson from tentative to supported or repeated. Confidence never moves backward."),
   }),
   async execute(input, ctx) {
-    return recordLearning(ctx, input, input.lessons ?? [], input.confidenceUpdates ?? []);
+    return recordLearning(
+      ctx,
+      input,
+      input.lessons ?? [],
+      input.confidenceUpdates ?? [],
+      input.relationships ?? [],
+    );
   },
 });

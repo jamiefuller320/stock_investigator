@@ -1,4 +1,11 @@
 import type { ToolContext } from "@cursor/bdk/tools";
+import {
+  applyNetworkUpdate,
+  buildNetworkView,
+  emptyEcosystemStore,
+  isEcosystemStore,
+  type RelationshipDraft,
+} from "./network.js";
 
 /**
  * Learning ledger for the FTSE growth explorer.
@@ -79,7 +86,7 @@ type Vehicle = (typeof VEHICLES)[number];
 type Stance = (typeof STANCES)[number];
 type LessonEffect = (typeof LESSON_EFFECTS)[number];
 type LessonScope = (typeof LESSON_SCOPES)[number];
-type Confidence = (typeof CONFIDENCE)[number];
+export type Confidence = (typeof CONFIDENCE)[number];
 
 export type CompanyCard = {
   ticker: string;
@@ -152,6 +159,7 @@ export type Assessment = {
   evidenceUsed: string[];
   lessonsApplied: string[];
   freeNotes: string;
+  ecosystem: string | null;
 };
 
 type AssessmentFile = {
@@ -188,6 +196,7 @@ export type Lesson = {
 type Revisit = {
   ticker: string;
   lessonId: string;
+  relationshipId?: string;
   reason: string;
   queuedAt: string;
 };
@@ -246,7 +255,9 @@ export type AssessmentDraft = {
   openQuestions?: string[];
   evidenceUsed?: string[];
   lessonsApplied?: string[];
+  relationshipsAcknowledged?: string[];
   freeNotes?: string;
+  ecosystem?: string;
 };
 
 type HostKv = ToolContext["host"]["kv"];
@@ -839,6 +850,27 @@ async function readAssessment(kv: HostKv, prefix: string, ticker: string): Promi
   return isAssessmentFile(value) ? value : null;
 }
 
+async function readEcosystem(kv: HostKv, prefix: string) {
+  const value = await kv.get(`${prefix}ecosystem`);
+  return isEcosystemStore(value) ? value : emptyEcosystemStore();
+}
+
+async function trajectoryOf(kv: HostKv, prefix: string, ticker: string) {
+  const file = await readAssessment(kv, prefix, ticker);
+  if (!file) return null;
+  const current = file.current;
+  return {
+    ticker: current.ticker,
+    name: current.name,
+    stance: current.stance,
+    conviction: current.conviction,
+    revenueGrowthView: current.revenueGrowthView,
+    recordedAt: current.recordedAt,
+    growthThesis: current.growthThesis,
+    ecosystem: current.ecosystem ?? null,
+  };
+}
+
 function profileFor(card: CompanyCard | undefined, assessment: Assessment | null): Profile | null {
   if (!card && !assessment) return null;
   const traits = new Set<string>([...(assessment?.traits ?? []), ...(card?.traits ?? [])]);
@@ -994,10 +1026,12 @@ export async function buildWorkItem(
 
   const file = await readAssessment(ctx.host.kv, prefix, chosen.ticker);
   const pendingIds = revisits
-    .filter((revisit) => revisit.ticker === chosen!.ticker)
+    .filter((revisit) => revisit.ticker === chosen!.ticker && revisit.lessonId !== "")
     .map((revisit) => revisit.lessonId);
   const profile = profileFor(chosen, file?.current ?? null);
   const packet = profile ? selectLessons(lessons, profile, chosen.ticker, pendingIds) : [];
+  const ecosystem = await readEcosystem(ctx.host.kv, prefix);
+  const network = await buildNetworkView(ecosystem, chosen.ticker, (id) => trajectoryOf(ctx.host.kv, prefix, id));
 
   return {
     ok: true as const,
@@ -1014,6 +1048,7 @@ export async function buildWorkItem(
     priorAssessment: file?.current ?? null,
     lessonsToApply: packet.map(lessonSummary),
     requiredLessonIds: packet.map((lesson) => lesson.id),
+    network,
     sectors: sectorsOf(snapshot),
   };
 }
@@ -1059,6 +1094,7 @@ export async function recordLearning(
   draft: AssessmentDraft,
   lessonDrafts: LessonDraft[],
   confidenceUpdates: Array<{ id: string; confidence: Confidence }>,
+  relationshipDrafts: RelationshipDraft[] = [],
 ) {
   const mode = dataMode(ctx);
   const prefix = storePrefix(ctx, mode);
@@ -1082,6 +1118,8 @@ export async function recordLearning(
   const nowIso = now.toISOString();
 
   if (
+    relationshipDrafts.length === 0 &&
+    !draft.ecosystem &&
     existing &&
     existing.current.growthThesis === draft.growthThesis &&
     existing.current.stance === draft.stance &&
@@ -1096,7 +1134,9 @@ export async function recordLearning(
     };
   }
 
-  const pendingIds = revisits.filter((revisit) => revisit.ticker === ticker).map((revisit) => revisit.lessonId);
+  const pendingIds = revisits
+    .filter((revisit) => revisit.ticker === ticker && revisit.lessonId !== "")
+    .map((revisit) => revisit.lessonId);
   const profile = profileFor(card, existing?.current ?? null);
   const required = profile ? selectLessons(lessons, profile, ticker, pendingIds) : [];
   const applied = [...new Set((draft.lessonsApplied ?? []).map((id) => id.trim()).filter(Boolean))];
@@ -1111,6 +1151,35 @@ export async function recordLearning(
     };
   }
   const unknownApplied = applied.filter((id) => !lessons.some((lesson) => lesson.id === id));
+  const ecosystemStore = await readEcosystem(ctx.host.kv, prefix);
+  const network = await buildNetworkView(ecosystemStore, ticker, (id) => trajectoryOf(ctx.host.kv, prefix, id));
+  const acknowledged = [...new Set((draft.relationshipsAcknowledged ?? []).map((id) => id.trim()).filter(Boolean))];
+  const missingRelationships = network.requiredRelationshipIds.filter((id) => !acknowledged.includes(id));
+  if (missingRelationships.length > 0) {
+    return {
+      ok: false as const,
+      error: "relationships_not_acknowledged",
+      detail:
+        "Cite every relationship in network.direct. Citing means you used it, including when the prime trajectory did not change your stance.",
+      missing: missingRelationships,
+      network,
+    };
+  }
+  const metaBefore = await readMeta(ctx.host.kv, prefix);
+  const networkUpdate = applyNetworkUpdate({
+    store: ecosystemStore,
+    directory: snapshot.companies.map((company) => ({ ticker: company.ticker, name: company.name })),
+    drafts: relationshipDrafts,
+    recordedFrom: ticker,
+    recordedFromName: card.name,
+    ecosystem: draft.ecosystem,
+    now,
+    trajectoryChanged:
+      existing != null &&
+      (existing.current.revenueGrowthView !== draft.revenueGrowthView || existing.current.stance !== draft.stance),
+    assessed: new Set(metaBefore.assessedTickers),
+  });
+  if (!networkUpdate.ok) return { ok: false as const, error: networkUpdate.error, detail: networkUpdate.detail };
 
   const sectors = sectorsOf(snapshot);
   const prepared: Lesson[] = [];
@@ -1197,6 +1266,8 @@ export async function recordLearning(
     evidenceUsed: draft.evidenceUsed ?? [],
     lessonsApplied: applied.filter((id) => lessons.some((lesson) => lesson.id === id)),
     freeNotes: (draft.freeNotes ?? "").trim(),
+    ecosystem:
+      draft.ecosystem !== undefined ? draft.ecosystem.trim() || null : (existing?.current.ecosystem ?? null),
   };
 
   const history = existing ? [...existing.history, existing.current].slice(-HISTORY_CAP) : [];
@@ -1277,6 +1348,21 @@ export async function recordLearning(
   }
   await ctx.host.kv.put(`${prefix}lesson-ids`, ids);
 
+  for (const item of networkUpdate.queues) {
+    const open = queued.some(
+      (revisit) => revisit.ticker === item.ticker && revisit.relationshipId === item.relationshipId,
+    );
+    if (open) continue;
+    queued.push({
+      ticker: item.ticker,
+      lessonId: "",
+      relationshipId: item.relationshipId,
+      reason: item.reason,
+      queuedAt: nowIso,
+    });
+  }
+  await ctx.host.kv.put(`${prefix}ecosystem`, networkUpdate.store);
+
   const warnings: string[] = [];
   for (const update of confidenceUpdates) {
     const stored = await ctx.host.kv.get(`${prefix}lesson:${update.id}`);
@@ -1294,7 +1380,13 @@ export async function recordLearning(
   }
 
   const closed = new Set(applied);
-  const remaining = queued.filter((revisit) => !(revisit.ticker === ticker && closed.has(revisit.lessonId)));
+  const ackedRelationships = new Set(acknowledged);
+  const remaining = queued.filter((revisit) => {
+    if (revisit.ticker !== ticker) return true;
+    if (revisit.relationshipId) return !ackedRelationships.has(revisit.relationshipId);
+    if (revisit.lessonId) return !closed.has(revisit.lessonId);
+    return true;
+  });
   await ctx.host.kv.put(`${prefix}revisits`, remaining);
 
   return {
@@ -1309,7 +1401,9 @@ export async function recordLearning(
     lessonsApplied: assessment.lessonsApplied,
     unknownLessonIds: unknownApplied,
     warnings,
-    revisitsQueued: created.reduce((sum, lesson) => sum + lesson.revisitsQueued, 0),
+    relationships: networkUpdate.updates,
+    revisitsQueued:
+      created.reduce((sum, lesson) => sum + lesson.revisitsQueued, 0) + networkUpdate.queues.length,
     openRevisits: remaining.length,
     assessed: meta.assessedTickers.length,
     total: snapshot.companies.length,
@@ -1324,6 +1418,7 @@ export async function learningStatus(ctx: ToolContext, limits: { lessons: number
   const meta = await readMeta(ctx.host.kv, prefix);
   const revisits = await readRevisits(ctx.host.kv, prefix);
   const lessons = await readLessons(ctx.host.kv, prefix);
+  const ecosystem = await readEcosystem(ctx.host.kv, prefix);
   const assessed = new Set(meta.assessedTickers);
   const nextNew = snapshot.companies.find((company) => !assessed.has(company.ticker)) ?? null;
   return {
@@ -1342,6 +1437,7 @@ export async function learningStatus(ctx: ToolContext, limits: { lessons: number
       remainingNew: snapshot.companies.length - assessed.size,
       openRevisits: revisits.length,
       lessons: lessons.length,
+      relationships: ecosystem.links.length,
       nextNewTicker: nextNew?.ticker ?? null,
       nextQueue: revisits[0]?.ticker ?? nextNew?.ticker ?? null,
     },
@@ -1349,5 +1445,9 @@ export async function learningStatus(ctx: ToolContext, limits: { lessons: number
     recentAssessments: meta.recent,
     openRevisits: revisits.slice(0, limits.revisits),
     lessons: lessons.slice(-limits.lessons).reverse().map(lessonSummary),
+    network: {
+      links: ecosystem.links.length,
+      ecosystems: [...new Set(ecosystem.members.map((member) => member.ecosystem))].slice(0, 12),
+    },
   };
 }
