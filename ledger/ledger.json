@@ -1,0 +1,141 @@
+{
+  "version": 1,
+  "description": "FTSE Growth Explorer learning ledger. Assessments, lessons, supply relationships, ecosystem membership, and revisits. The FTSE universe cache is not included.",
+  "updatedAt": "2026-10-16T17:29:45.924Z",
+  "progress": {
+    "assessed": 1,
+    "lessons": 1,
+    "relationships": 0,
+    "ecosystems": 1,
+    "openRevisits": 0
+  },
+  "meta": {
+    "assessedTickers": [
+      "3IN.L"
+    ],
+    "stanceCounts": {
+      "pass": 1
+    },
+    "recent": [
+      {
+        "ticker": "3IN.L",
+        "name": "3i Infrastructure plc",
+        "stance": "pass",
+        "conviction": 3,
+        "revision": 1,
+        "recordedAt": "2026-10-16T17:29:45.924Z"
+      }
+    ]
+  },
+  "assessments": {
+    "3IN.L": {
+      "current": {
+        "ticker": "3IN.L",
+        "name": "3i Infrastructure plc",
+        "sector": "Financial Services",
+        "vehicle": "operating",
+        "signal": "hold",
+        "traits": [
+          "low_leverage",
+          "fcf_positive",
+          "earnings_shrinking",
+          "above_sma200",
+          "high_data_quality",
+          "piotroski_weak",
+          "operating_company",
+          "family_cheapness",
+          "family_dividend"
+        ],
+        "revision": 1,
+        "recordedAt": "2026-10-16T17:29:45.924Z",
+        "stance": "pass",
+        "conviction": 3,
+        "growthThesis": "3i Infrastructure is an economic-infrastructure capital allocator whose screen profile is income-and-cheapness, not growth: earnings are down sharply (−77%), Piotroski is weak (2), and ROE is only mid-single digits. Positive FCF, low gearing, and a ~3.5% yield support a hold-style value case near book, but that is NAV/distribution compounding rather than a distinguishable operating growth edge over a multi-year horizon. The value-screen hold and family passes (cheapness, dividend) are evidence of relative value, not a reason to upgrade the growth stance.",
+        "growthDrivers": [
+          "Inflation-linked and contracted cash flows in economic infrastructure assets can support NAV and distributions over time",
+          "Low balance-sheet gearing (D/E ~14%) leaves room to fund bolt-on investments without stressed leverage",
+          "Positive free cash flow on the screen supports the dividend and reinvestment capacity"
+        ],
+        "growthConstraints": [
+          "Screen earnings growth deeply negative (−77%), so near-term growth optics are poor",
+          "Weak Piotroski (2) and only 8% ROE undermine a quality-compounder story",
+          "Value-screen signal is hold with few quality/GARP models passing"
+        ],
+        "horizonYears": 5,
+        "revenueGrowthView": "decelerating",
+        "earningsQuality": "low",
+        "reinvestment": "moderate",
+        "valuationNote": "P/E ~12 and P/B ~1.0 with a ~3.5% yield look fair for an infrastructure allocator, but collapsing earnings make the multiple less supportive of a growth-led return case.",
+        "expectedReturnBand": "low-to-mid single-digit annualised over 5 years if distributions and NAV hold near book; not a growth-compounding setup on current screen evidence",
+        "keyRisks": [
+          "Further earnings or valuation write-downs in the infrastructure portfolio",
+          "Interest-rate or discount-rate moves compressing asset values and exit multiples",
+          "Dividend pressure if FCF or underlying distributions weaken",
+          "Thin fundamental quality (Piotroski 2) may signal deteriorating portfolio health"
+        ],
+        "whatWouldChangeMyMind": [
+          "Evidence of sustained earnings recovery and rising ROE on a later screen vintage",
+          "Clear acceleration in NAV/FCF with quality metrics (e.g. Piotroski) improving",
+          "A durable growth driver in the portfolio mix (e.g. energy-transition or digital infra) showing through on the card"
+        ],
+        "openQuestions": [
+          "How much of the earnings drop is mark-to-market versus cash generation?",
+          "Is the screen vehicle label 'operating' masking an investment-company NAV model?",
+          "What is the mix of regulated vs demand-risk assets behind the FCF?"
+        ],
+        "evidenceUsed": [
+          "company card signal hold",
+          "P/E 12.1 P/B 1.0 yield 3.5% ROE 8.1%",
+          "earningsGrowthPercent −77.4",
+          "piotroski 2",
+          "debtToEquityPercent 14.32",
+          "freeCashflow positive",
+          "passedFamilies cheapness dividend",
+          "traits earnings_shrinking low_leverage fcf_positive"
+        ],
+        "lessonsApplied": [],
+        "freeNotes": "First name in a fresh walk (0 assessed). No lessons or network links to apply. Screen flags hold and negative earnings growth; stance deliberately diverges from any temptation to treat cheapness/dividend family passes as a growth upgrade. Treated as capital allocator into economic infrastructure rather than a classic operating compounder despite vehicle=operating on the card.",
+        "ecosystem": "economic infrastructure"
+      },
+      "history": []
+    }
+  },
+  "lessons": [
+    {
+      "id": "L-mvb8t490-r6r0lk",
+      "createdAt": "2026-10-16T17:29:45.924Z",
+      "updatedAt": "2026-10-16T17:29:45.924Z",
+      "sourceTicker": "3IN.L",
+      "title": "Cheapness plus shrinking earnings is not growth",
+      "statement": "When a constituent passes value cheapness or dividend families but shows sharply negative earnings growth and a weak Piotroski score, treat the screen as a value/income signal only. Do not upgrade the growth stance without separate evidence of earnings or NAV compounding recovery.",
+      "scope": "matching",
+      "effect": "downgrade_growth",
+      "evidence": "3IN.L: hold signal, family_cheapness and family_dividend, earningsGrowthPercent −77.4, piotroski 2, ROE 8.1%.",
+      "confidence": "tentative",
+      "traitMatch": "all",
+      "appliesWhen": {
+        "sectors": [],
+        "vehicles": [
+          "operating"
+        ],
+        "signals": [],
+        "traits": [
+          "earnings_shrinking",
+          "family_cheapness"
+        ]
+      },
+      "applications": []
+    }
+  ],
+  "ecosystem": {
+    "links": [],
+    "members": [
+      {
+        "ecosystem": "economic infrastructure",
+        "ticker": "3IN.L",
+        "name": "3i Infrastructure plc"
+      }
+    ]
+  },
+  "revisits": []
+}

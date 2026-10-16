@@ -4,7 +4,7 @@ import { learningStatus } from "../lib/framework.js";
 
 export default defineTool({
   description:
-    "Read progress through the FTSE 350, stance counts, the open revisit queue, and the lesson ledger. Does not start an investigation.",
+    "Read progress through the FTSE 350, stance counts, the open revisit queue, and the lesson ledger, including the permanent ledger file. Does not start an investigation.",
   effect: "read",
   inputSchema: z.object({
     lessonLimit: z.number().int().min(1).max(30).optional(),

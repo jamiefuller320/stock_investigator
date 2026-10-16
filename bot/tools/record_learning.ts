@@ -15,7 +15,7 @@ const confidence = z.enum(CONFIDENCE);
 
 export default defineTool({
   description:
-    "Save one structured growth assessment, reusable lessons, and ecosystem relationships. Lessons and newly mapped primes are queued against constituents already assessed. lessonsApplied and relationshipsAcknowledged must cite every id in the work packet. Call once per name.",
+    "Save one structured growth assessment, reusable lessons, and ecosystem relationships. Lessons and newly mapped primes are queued against constituents already assessed. A live save also writes ledger/ledger.json. lessonsApplied and relationshipsAcknowledged must cite every id in the work packet. Call once per name.",
   effect: "write",
   inputSchema: z.object({
     ticker: z.string(),

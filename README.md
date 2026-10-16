@@ -15,7 +15,11 @@ Progress is alphabetical by ticker. The weekday schedule (`bot/schedules/weekday
 
 ## Ledger
 
-Shared across sessions, in the host key-value store:
+The working copy is the host key-value store. A successful live `record_learning` also writes a versioned JSON file, `ledger/ledger.json`, and the same bytes to the deployment file `ledger.json` (host files, deployment scope, which survives a new session and a redeploy). The file holds assessments, lessons, supply relationships, ecosystem membership, revisits, and progress. It does not hold the FTSE universe cache.
+
+A fresh live session with an empty walk loads that file before choosing the next name. If both copies exist, the newer `updatedAt` is loaded. Eval sessions and `GROWTH_EXPLORER_FIXTURE=1` do not read or write it.
+
+The committed file already contains the 3i Infrastructure (`3IN.L`) assessment, so the next live name continues after that pass.
 
 | Record | What it holds |
 | --- | --- |
