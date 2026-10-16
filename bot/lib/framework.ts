@@ -100,7 +100,7 @@ export type CompanyCard = {
   passedFamilies: string[];
   failedModels: string[];
   keyMetrics: Record<string, string>;
-  debtToEquity: number | null;
+  debtToEquityPercent: number | null;
   currentRatio: number | null;
   earningsGrowthPercent: number | null;
   dividendYieldPercent: number | null;
@@ -594,7 +594,7 @@ export function toCard(raw: RawCompany): CompanyCard {
     passedFamilies: raw.passedFamilies,
     failedModels: raw.failedModels.slice(0, 8),
     keyMetrics: raw.keyMetrics,
-    debtToEquity: round(raw.debtToEquity, 2),
+    debtToEquityPercent: round(raw.debtToEquity, 2),
     currentRatio: round(raw.currentRatio, 2),
     earningsGrowthPercent,
     dividendYieldPercent,

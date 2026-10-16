@@ -52,7 +52,7 @@ Trait ids:
 - Kind: `operating_company`, `investment_vehicle`
 - Value-screen families passed: `family_cheapness`, `family_quality`, `family_garp`, `family_risk`, `family_dividend`
 
-`earningsGrowthPercent`, `dividendYieldPercent`, and `priceVsSma200Percent` are already in percent. `fcfDividendCoverageNet` is a ratio (1.0 means covered once). Cash flow figures are currency units from the screen, not millions unless the card says so.
+`earningsGrowthPercent`, `dividendYieldPercent`, `priceVsSma200Percent`, and `debtToEquityPercent` are already in percent. A `debtToEquityPercent` of 2.4 means 2.4% debt to equity, not 2.4 times. `fcfDividendCoverageNet` is a ratio (1.0 means covered once). Cash flow figures are currency units from the screen, not millions unless the card says so.
 
 ## Expected return
 
