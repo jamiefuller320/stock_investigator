@@ -1,5 +1,23 @@
 import type { ToolContext } from "@cursor/bdk/tools";
 import {
+  buildLedgerDocument,
+  chooseLedger,
+  LEDGER_DEPLOYMENT_PATH,
+  LEDGER_REPO_RELATIVE,
+  LEDGER_VERSION,
+  ledgerWarning,
+  LIVE_PREFIX,
+  readDeploymentLedger,
+  readRepoLedger,
+  renderLedgerDocument,
+  writeDeploymentLedger,
+  writeRepoLedger,
+  type DeploymentFiles,
+  type LedgerDocument,
+  type LedgerRead,
+  type LedgerSource,
+} from "./ledger-file.js";
+import {
   applyNetworkUpdate,
   buildNetworkView,
   emptyEcosystemStore,
@@ -11,8 +29,10 @@ import {
  * Learning ledger for the FTSE growth explorer.
  *
  * Evidence comes from the public value_investor screen
- * (docs/data/latest.json). Judgement lives in kv so a later process
- * still sees assessments, lessons, and the revisit queue.
+ * (docs/data/latest.json). Judgement lives in kv for the running
+ * session. A successful live record also writes ledger/ledger.json
+ * and the deployment file ledger.json, and a fresh live session
+ * loads that file back before choosing the next name.
  */
 
 const UNIVERSE_URL =
@@ -946,14 +966,185 @@ function sectorsOf(snapshot: UniverseSnapshot): string[] {
   return [...new Set(snapshot.companies.map((company) => company.sector))].sort();
 }
 
+type LedgerTouch = {
+  active: boolean;
+  hydrated: boolean;
+  source: LedgerSource | null;
+  updatedAt: string | null;
+  warning?: string;
+};
+
+type PermanentLedgerStatus =
+  | { active: false; saved: false }
+  | {
+      active: true;
+      saved: boolean;
+      version: typeof LEDGER_VERSION;
+      updatedAt: string;
+      file: string | null;
+      deploymentFile: string | null;
+      reason?: string;
+      repoError?: string;
+      deploymentError?: string;
+    };
+
+function deploymentFiles(ctx: ToolContext): DeploymentFiles | undefined {
+  return ctx.host.files;
+}
+
+async function applyLedgerDocument(kv: HostKv, prefix: string, document: LedgerDocument): Promise<void> {
+  const json = (value: unknown) => value as Parameters<HostKv["put"]>[1];
+  await kv.put(`${prefix}meta`, document.meta);
+  await kv.put(`${prefix}revisits`, json(document.revisits));
+  await kv.put(`${prefix}ecosystem`, document.ecosystem);
+  const ids: string[] = [];
+  for (const lesson of document.lessons) {
+    if (!lesson || typeof lesson !== "object") continue;
+    const id = (lesson as { id?: unknown }).id;
+    if (typeof id !== "string") continue;
+    ids.push(id);
+    await kv.put(`${prefix}lesson:${id}`, json(lesson));
+  }
+  await kv.put(`${prefix}lesson-ids`, ids);
+  for (const [ticker, file] of Object.entries(document.assessments)) {
+    await kv.put(`${prefix}assessment:${ticker}`, json(file));
+  }
+}
+
+async function mirrorPermanentLedger(
+  ctx: ToolContext,
+  chosen: { document: LedgerDocument; source: LedgerSource },
+  repo: LedgerRead,
+  deployment: LedgerRead,
+): Promise<string | undefined> {
+  const text = renderLedgerDocument(chosen.document);
+  const warnings: string[] = [];
+  const deploymentBehind =
+    !deployment.ok || (deployment.ok && deployment.document.updatedAt < chosen.document.updatedAt);
+  if (deploymentBehind) {
+    try {
+      await writeDeploymentLedger(deploymentFiles(ctx), text);
+    } catch (error) {
+      warnings.push(error instanceof Error ? error.message : String(error));
+    }
+  }
+  if (!repo.ok && repo.missing) {
+    try {
+      await writeRepoLedger(text);
+    } catch (error) {
+      warnings.push(error instanceof Error ? error.message : String(error));
+    }
+  }
+  return warnings.length > 0 ? warnings.join(" ") : undefined;
+}
+
+async function ensureLiveLedger(ctx: ToolContext, prefix: string): Promise<LedgerTouch> {
+  if (prefix !== LIVE_PREFIX) return { active: false, hydrated: false, source: null, updatedAt: null };
+  const repo = await readRepoLedger();
+  const deployment = await readDeploymentLedger(deploymentFiles(ctx));
+  const chosen = chooseLedger(repo, deployment);
+  const warning = ledgerWarning(repo, deployment);
+  const meta = await readMeta(ctx.host.kv, prefix);
+  if (meta.assessedTickers.length > 0 || !chosen) {
+    return {
+      active: true,
+      hydrated: false,
+      source: null,
+      updatedAt: chosen?.document.updatedAt ?? null,
+      ...(warning ? { warning } : {}),
+    };
+  }
+  await applyLedgerDocument(ctx.host.kv, prefix, chosen.document);
+  const mirrorWarning = await mirrorPermanentLedger(ctx, chosen, repo, deployment);
+  const combined = [warning, mirrorWarning].filter((item): item is string => Boolean(item)).join(" ");
+  return {
+    active: true,
+    hydrated: true,
+    source: chosen.source,
+    updatedAt: chosen.document.updatedAt,
+    ...(combined ? { warning: combined } : {}),
+  };
+}
+
+async function persistLiveLedger(ctx: ToolContext, prefix: string, updatedAt: string): Promise<PermanentLedgerStatus> {
+  if (prefix !== LIVE_PREFIX) return { active: false, saved: false };
+  const meta = await readMeta(ctx.host.kv, prefix);
+  const assessments: LedgerDocument["assessments"] = {};
+  for (const ticker of [...meta.assessedTickers].sort()) {
+    const file = await readAssessment(ctx.host.kv, prefix, ticker);
+    if (file) assessments[ticker] = { current: file.current, history: file.history };
+  }
+  const document = buildLedgerDocument({
+    updatedAt,
+    meta,
+    assessments,
+    lessons: await readLessons(ctx.host.kv, prefix),
+    ecosystem: await readEcosystem(ctx.host.kv, prefix),
+    revisits: await readRevisits(ctx.host.kv, prefix),
+  });
+  const text = renderLedgerDocument(document);
+  let file: string | null = null;
+  let deploymentFile: string | null = null;
+  let repoError: string | undefined;
+  let deploymentError: string | undefined;
+  try {
+    await writeRepoLedger(text);
+    file = LEDGER_REPO_RELATIVE;
+  } catch (error) {
+    repoError = error instanceof Error ? error.message : String(error);
+  }
+  try {
+    await writeDeploymentLedger(deploymentFiles(ctx), text);
+    deploymentFile = LEDGER_DEPLOYMENT_PATH;
+  } catch (error) {
+    deploymentError = error instanceof Error ? error.message : String(error);
+  }
+  return {
+    active: true,
+    saved: file != null || deploymentFile != null,
+    version: LEDGER_VERSION,
+    updatedAt,
+    file,
+    deploymentFile,
+    ...(repoError ? { repoError } : {}),
+    ...(deploymentError ? { deploymentError } : {}),
+  };
+}
+
+function resumedLedger(touch: LedgerTouch): {
+  permanentLedger?: {
+    resumedFrom: LedgerSource | null;
+    file: string;
+    deploymentFile: string;
+    updatedAt: string | null;
+  };
+  ledgerWarning?: string;
+} {
+  if (!touch.active) return {};
+  return {
+    ...(touch.hydrated
+      ? {
+          permanentLedger: {
+            resumedFrom: touch.source,
+            file: LEDGER_REPO_RELATIVE,
+            deploymentFile: LEDGER_DEPLOYMENT_PATH,
+            updatedAt: touch.updatedAt,
+          },
+        }
+      : {}),
+    ...(touch.warning ? { ledgerWarning: touch.warning } : {}),
+  };
+}
+
 export async function buildWorkItem(
   ctx: ToolContext,
   options: { ticker?: string; refreshUniverse?: boolean },
 ) {
   const mode = dataMode(ctx);
   const prefix = storePrefix(ctx, mode);
+  const ledgerTouch = await ensureLiveLedger(ctx, prefix);
   const snapshot = await loadUniverse(ctx, prefix, mode, options.refreshUniverse === true);
-  if ("error" in snapshot) return { ok: false as const, ...snapshot };
+  if ("error" in snapshot) return { ok: false as const, ...snapshot, ...resumedLedger(ledgerTouch) };
 
   const meta = await readMeta(ctx.host.kv, prefix);
   const revisits = await readRevisits(ctx.host.kv, prefix);
@@ -987,6 +1178,7 @@ export async function buildWorkItem(
         error: "unknown_ticker",
         detail: `${requested} is not in the current ${snapshot.universeLabel} extract.`,
         progress,
+        ...resumedLedger(ledgerTouch),
       };
     }
     const pending = revisits.filter((revisit) => revisit.ticker === chosen!.ticker);
@@ -1021,7 +1213,7 @@ export async function buildWorkItem(
   }
 
   if (!chosen || kind === "done") {
-    return { ok: true as const, kind: "done" as const, progress, sectors: sectorsOf(snapshot) };
+    return { ok: true as const, kind: "done" as const, progress, sectors: sectorsOf(snapshot), ...resumedLedger(ledgerTouch) };
   }
 
   const file = await readAssessment(ctx.host.kv, prefix, chosen.ticker);
@@ -1050,6 +1242,7 @@ export async function buildWorkItem(
     requiredLessonIds: packet.map((lesson) => lesson.id),
     network,
     sectors: sectorsOf(snapshot),
+    ...resumedLedger(ledgerTouch),
   };
 }
 
@@ -1098,6 +1291,7 @@ export async function recordLearning(
 ) {
   const mode = dataMode(ctx);
   const prefix = storePrefix(ctx, mode);
+  await ensureLiveLedger(ctx, prefix);
   const snapshot = await loadUniverse(ctx, prefix, mode, false);
   if ("error" in snapshot) return { ok: false as const, ...snapshot };
 
@@ -1131,6 +1325,18 @@ export async function recordLearning(
       ticker,
       revision: existing.current.revision,
       detail: "An identical thesis and stance was recorded moments ago. Nothing new was written.",
+      permanentLedger:
+        prefix === LIVE_PREFIX
+          ? {
+              active: true as const,
+              saved: false as const,
+              version: LEDGER_VERSION,
+              updatedAt: existing.current.recordedAt,
+              file: LEDGER_REPO_RELATIVE,
+              deploymentFile: LEDGER_DEPLOYMENT_PATH,
+              reason: "deduped",
+            }
+          : { active: false as const, saved: false as const },
     };
   }
 
@@ -1388,6 +1594,7 @@ export async function recordLearning(
     return true;
   });
   await ctx.host.kv.put(`${prefix}revisits`, remaining);
+  const permanentLedger = await persistLiveLedger(ctx, prefix, nowIso);
 
   return {
     ok: true as const,
@@ -1407,14 +1614,16 @@ export async function recordLearning(
     openRevisits: remaining.length,
     assessed: meta.assessedTickers.length,
     total: snapshot.companies.length,
+    permanentLedger,
   };
 }
 
 export async function learningStatus(ctx: ToolContext, limits: { lessons: number; revisits: number }) {
   const mode = dataMode(ctx);
   const prefix = storePrefix(ctx, mode);
+  const ledgerTouch = await ensureLiveLedger(ctx, prefix);
   const snapshot = await loadUniverse(ctx, prefix, mode, false);
-  if ("error" in snapshot) return { ok: false as const, ...snapshot };
+  if ("error" in snapshot) return { ok: false as const, ...snapshot, ...resumedLedger(ledgerTouch) };
   const meta = await readMeta(ctx.host.kv, prefix);
   const revisits = await readRevisits(ctx.host.kv, prefix);
   const lessons = await readLessons(ctx.host.kv, prefix);
@@ -1449,5 +1658,16 @@ export async function learningStatus(ctx: ToolContext, limits: { lessons: number
       links: ecosystem.links.length,
       ecosystems: [...new Set(ecosystem.members.map((member) => member.ecosystem))].slice(0, 12),
     },
+    permanentLedger: ledgerTouch.active
+      ? {
+          active: true as const,
+          file: LEDGER_REPO_RELATIVE,
+          deploymentFile: LEDGER_DEPLOYMENT_PATH,
+          updatedAt: ledgerTouch.updatedAt,
+          hydrated: ledgerTouch.hydrated,
+          ...(ledgerTouch.source ? { resumedFrom: ledgerTouch.source } : {}),
+          ...(ledgerTouch.warning ? { warning: ledgerTouch.warning } : {}),
+        }
+      : { active: false as const },
   };
 }

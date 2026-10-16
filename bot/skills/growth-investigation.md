@@ -75,4 +75,4 @@ Write a qualitative band with a horizon and a condition. Example: "low-single-di
 
 ## Recording
 
-Call `record_learning` once. If it returns `lessons_not_applied` or `unknown_trait`, correct the input and call it again. Do not change the thesis just to get past the error.
+Call `record_learning` once. If it returns `lessons_not_applied` or `unknown_trait`, correct the input and call it again. Do not change the thesis just to get past the error. A live save writes `ledger/ledger.json`. Do not edit that file yourself.
